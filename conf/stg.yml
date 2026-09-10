@@ -1,0 +1,11 @@
+# Staging overlay. Gates match production exactly. A staging tier with softer
+# thresholds than prd validates nothing — it only teaches you to trust a signal
+# that will not hold.
+catalog: kings_stg
+landing_volume: /Volumes/kings_stg/landing/files
+checkpoint_volume: /Volumes/kings_stg/ops/checkpoints
+data_scale: small
+quality:
+  max_quarantine_pct_warn: 1.0
+  max_quarantine_pct_fail: 5.0
+  freshness_sla_minutes: 120

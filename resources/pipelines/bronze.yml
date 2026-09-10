@@ -1,0 +1,54 @@
+# Bronze ingestion pipeline (Lakeflow Spark Declarative Pipeline).
+#
+# ADR-003 concurrency budget: Free Edition allows ONE active pipeline per
+# pipeline type. All bronze streaming sources therefore live in a single
+# pipeline rather than one pipeline per source. That is a constraint, but it is
+# also defensible on its own merits — sources sharing a landing volume and a
+# schema-evolution story benefit from a shared event log and one place to look
+# when ingestion breaks.
+
+resources:
+  pipelines:
+
+    bronze_ingestion:
+      name: "[${var.environment}] bronze ingestion"
+      catalog: ${var.catalog}
+      schema: ${var.bronze_schema}
+
+      # Serverless is the only option on Free Edition and also the right default:
+      # no cluster spec to write, no node types to pick, auto-scaled per batch.
+      serverless: true
+
+      # Triggered rather than continuous. ADR-003 again: continuous mode holds
+      # the single available pipeline slot indefinitely, and the scan burst is
+      # game-shaped anyway — there is nothing to consume between games.
+      continuous: false
+
+      # development: false in stg/prd means the pipeline tears down compute
+      # between runs instead of keeping it warm. Warm compute is convenient
+      # while iterating and wasteful on a schedule.
+      development: ${var.pipeline_development_mode}
+
+      # No RESET on failure. A full refresh would re-read the entire landing
+      # volume and re-quarantine everything, destroying the quarantine history
+      # that M6 reports on.
+      photon: true
+
+      libraries:
+        - glob:
+            include: ../../pipelines/bronze/**
+
+      configuration:
+        # Surfaced to pipeline code via spark.conf.get(). Values come from the
+        # bundle target, so the same code runs against dev, stg, and prd with no
+        # edits — the tested CI/CD objective, applied to pipelines.
+        kings.landing_volume: ${var.landing_volume}
+        kings.checkpoint_volume: ${var.checkpoint_volume}
+        kings.environment: ${var.environment}
+
+      notifications:
+        - email_recipients:
+            - ${var.notification_email}
+          alerts:
+            - on-update-failure
+            - on-flow-failure

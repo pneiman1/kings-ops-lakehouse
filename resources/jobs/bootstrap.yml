@@ -1,0 +1,94 @@
+# Bootstrap and smoke-test jobs.
+#
+# Both run on serverless compute — Free Edition offers nothing else (ADR-002),
+# and omitting a job_cluster block is what "serverless" looks like in a bundle.
+# There is no cluster spec to write, which is a real simplification and not an
+# omission an interviewer should catch you out on.
+
+resources:
+  jobs:
+
+    bootstrap:
+      name: "[${var.environment}] bootstrap"
+      description: >-
+        One-time-per-environment setup: create the catalog, then generate and land
+        synthetic source data. Idempotent — safe to re-run, though re-running the
+        generator overwrites the landing zone.
+
+      tags:
+        env: ${var.environment}
+        tranche: T1
+
+      # Serialized: a second concurrent run would race the generator against
+      # itself on the same volume paths.
+      max_concurrent_runs: 1
+
+      tasks:
+        - task_key: create_catalog
+          sql_task:
+            file:
+              path: ../../sql/ddl/00_bootstrap_catalogs.sql
+            parameters:
+              catalog: ${var.catalog}
+              environment: ${var.environment}
+            warehouse_id: ${var.sql_warehouse_id}
+
+        - task_key: generate_source_data
+          depends_on:
+            - task_key: create_catalog
+          spark_python_task:
+            python_file: ../../tools/generate_source_data.py
+            parameters:
+              - "--output-dir"
+              - ${var.landing_volume}
+              - "--scale"
+              - ${var.data_scale}
+              - "--seed"
+              - "42"
+          environment_key: default
+
+      # Serverless Python tasks declare dependencies through an environment
+      # block rather than through cluster libraries.
+      environments:
+        - environment_key: default
+          spec:
+            client: "3"
+            dependencies:
+              - pandas>=2.0
+              - numpy>=1.26
+              - pyarrow>=15.0
+
+      email_notifications:
+        on_failure:
+          - ${var.notification_email}
+
+    smoke_test:
+      name: "[${var.environment}] smoke test"
+      description: >-
+        Post-deploy verification. Asserts the catalog resolves, all six schemas
+        exist, and the deploying identity can write. Run by CI immediately after
+        every deploy; a green deploy that skips this proves only that YAML parsed.
+
+      tags:
+        env: ${var.environment}
+        tranche: T1
+
+      max_concurrent_runs: 1
+
+      tasks:
+        - task_key: verify_deployment
+          sql_task:
+            file:
+              path: ../../sql/ddl/01_smoke_test.sql
+            parameters:
+              catalog: ${var.catalog}
+              environment: ${var.environment}
+              ops_schema: ${resources.schemas.ops.name}
+              run_id: "{{job.run_id}}"
+              git_sha: ${bundle.git.commit}
+            warehouse_id: ${var.sql_warehouse_id}
+
+      email_notifications:
+        on_failure:
+          - ${var.notification_email}
+

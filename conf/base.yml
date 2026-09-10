@@ -1,0 +1,104 @@
+# Base configuration. Everything here is environment-INDEPENDENT.
+# If a value differs between dev/stg/prd it does not belong in this file.
+
+catalog: kings_dev            # overridden by every target; dev is the safe default
+landing_volume: /Volumes/kings_dev/dev_pneimn1_landing/files
+checkpoint_volume: /Volumes/kings_dev/dev_pneimn1_ops/checkpoints
+
+bronze_schema: bronze
+silver_schema: silver
+gold_schema: gold
+quarantine_schema: quarantine
+ops_schema: ops
+
+data_scale: small
+continuous_streaming: false
+
+# --------------------------------------------------------------------------- #
+# Source registry
+# --------------------------------------------------------------------------- #
+# One entry per upstream system. Adding a source is a config change plus a
+# contract file — never a new bespoke notebook. This is the metadata-driven seam
+# that keeps ingestion code count flat as source count grows.
+sources:
+
+  gate_scans:
+    format: json
+    landing_subpath: gate_scans
+    contract_version: "1.1.0"      # 1.1.0 added scan_device_os mid-season
+    schema_evolution_mode: rescue  # never fail the stream on an unexpected field
+    max_files_per_trigger: 200
+    is_streaming: true
+
+  ticketing_cdc:
+    format: parquet
+    landing_subpath: ticketing/cdc
+    contract_version: "1.0.0"
+    schema_evolution_mode: failOnNewColumns  # CDC schema drift is a real incident
+    is_streaming: false
+
+  pos:
+    format: json
+    landing_subpath: pos
+    contract_version: "1.0.0"
+    schema_evolution_mode: rescue
+    is_streaming: false
+
+  crm_accounts:
+    format: csv
+    landing_subpath: crm_accounts
+    contract_version: "1.0.0"
+    schema_evolution_mode: addNewColumns
+    is_streaming: false
+
+  deposits:
+    format: csv
+    landing_subpath: deposits
+    contract_version: "1.0.0"
+    schema_evolution_mode: addNewColumns
+    is_streaming: false
+
+  seat_manifest:
+    format: csv
+    landing_subpath: seat_manifest
+    contract_version: "1.0.0"
+    schema_evolution_mode: addNewColumns
+    is_streaming: false
+
+  schedule:
+    format: json
+    landing_subpath: schedule
+    contract_version: "1.0.0"
+    schema_evolution_mode: addNewColumns
+    is_streaming: false
+
+  pricing:
+    format: csv
+    landing_subpath: pricing
+    contract_version: "1.0.0"
+    schema_evolution_mode: addNewColumns
+    is_streaming: false
+
+  sponsorship:
+    format: json
+    landing_subpath: sponsorship
+    contract_version: "1.0.0"
+    schema_evolution_mode: rescue
+    is_streaming: false
+
+  guest_services:
+    format: parquet
+    landing_subpath: guest_services
+    contract_version: "1.0.0"
+    schema_evolution_mode: addNewColumns
+    is_streaming: false
+
+# --------------------------------------------------------------------------- #
+# Quality gates
+# --------------------------------------------------------------------------- #
+quality:
+  max_quarantine_pct_warn: 1.0
+  max_quarantine_pct_fail: 5.0
+  max_null_key_pct_fail: 0.0
+  min_expected_row_count: 1
+  freshness_sla_minutes: 120

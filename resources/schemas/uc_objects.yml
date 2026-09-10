@@ -1,0 +1,57 @@
+# Unity Catalog schemas and volumes, managed declaratively by the bundle.
+#
+# NOTE ON CATALOGS: catalogs are not a bundle resource type. They are created
+# once per environment by sql/ddl/00_bootstrap_catalogs.sql, executed by the
+# bootstrap job. Schemas and volumes below ARE bundle-managed and are therefore
+# reconciled deterministically on every deploy.
+#
+# Why layers are schemas, not catalogs: catalog is already our environment axis
+# (ADR-001). Reusing it for layer separation would collapse two independent
+# dimensions into one and leave nowhere clean to hang environment-level grants.
+
+resources:
+  schemas:
+    landing:
+      catalog_name: ${var.catalog}
+      name: landing
+      comment: "Raw source files as delivered by upstream systems. No transformation."
+
+    bronze:
+      catalog_name: ${var.catalog}
+      name: bronze
+      comment: "Ingested source data with rescue and audit columns. Append-only."
+
+    silver:
+      catalog_name: ${var.catalog}
+      name: silver
+      comment: "Conformed, deduplicated, validated entities. SCD2 dimensions live here."
+
+    gold:
+      catalog_name: ${var.catalog}
+      name: gold
+      comment: "Star schema and business marts. The only layer analysts query."
+
+    quarantine:
+      catalog_name: ${var.catalog}
+      name: quarantine
+      comment: "Rows rejected at a contract or expectation boundary, retained for triage."
+
+    ops:
+      catalog_name: ${var.catalog}
+      name: ops
+      comment: "Platform observability: event log extracts, freshness SLOs, run metadata."
+
+  volumes:
+    landing_files:
+      catalog_name: ${var.catalog}
+      schema_name: ${resources.schemas.landing.name}
+      name: files
+      volume_type: MANAGED
+      comment: "Landing zone for all six source systems. Auto Loader reads from here."
+
+    checkpoints:
+      catalog_name: ${var.catalog}
+      schema_name: ${resources.schemas.ops.name}
+      name: checkpoints
+      volume_type: MANAGED
+      comment: "Structured Streaming checkpoints. Never delete without a documented reset."

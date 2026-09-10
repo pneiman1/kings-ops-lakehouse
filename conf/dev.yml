@@ -1,0 +1,10 @@
+# Development overlay. Loose gates so exploratory work is not blocked by data
+# defects that are the point of the exercise.
+catalog: kings_dev
+landing_volume: /Volumes/kings_dev/dev_pneimn1_landing/files
+checkpoint_volume: /Volumes/kings_dev/dev_pneimn1_ops/checkpoints
+data_scale: small
+quality:
+  max_quarantine_pct_warn: 5.0
+  max_quarantine_pct_fail: 25.0
+  freshness_sla_minutes: 1440

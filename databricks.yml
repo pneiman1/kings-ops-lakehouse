@@ -1,0 +1,159 @@
+# Declarative Automation Bundle root (formerly "Databricks Asset Bundles").
+#
+# Environment strategy — see docs/adr/ADR-001-environment-isolation.md
+# ---------------------------------------------------------------------------
+# Databricks Free Edition permits ONE workspace and ONE metastore per account.
+# Environments are therefore separated by CATALOG, not by workspace:
+#
+#     kings_dev  /  kings_stg  /  kings_prd
+#
+# Every resource reads its catalog from the ${var.catalog} variable, which each
+# target overrides. Nothing in this repo hardcodes a catalog name. That single
+# discipline is what makes the migration to workspace-per-environment a config
+# change rather than a rewrite, and it is the first thing an interviewer will
+# probe when you say "I used catalog isolation."
+
+bundle:
+  name: kings-ops-lakehouse
+  uuid: 8f1c6a2e-4d33-4b7a-9c10-2f5b7e9a4d61
+
+include:
+  - resources/schemas/*.yml
+  - resources/jobs/*.yml
+  - resources/pipelines/*.yml
+
+# ---------------------------------------------------------------------------
+# Variables
+# ---------------------------------------------------------------------------
+# Declared once with dev-safe defaults, overridden per target. Anything that
+# differs between environments belongs here; anything that does not, does not.
+variables:
+  catalog:
+    description: Unity Catalog catalog for this environment.
+    default: kings_dev
+
+  landing_volume:
+    description: Fully-qualified UC Volume path for the raw landing zone.
+    default: /Volumes/kings_dev/dev_pneimn1_landing/files
+
+  environment:
+    description: Short environment code, stamped onto every table and log record.
+    default: dev
+
+  data_scale:
+    description: Synthetic data scale profile used by the bootstrap job.
+    default: small
+
+  pipeline_continuous:
+    description: Whether streaming pipelines run continuously or triggered.
+    default: false
+
+  notification_email:
+    description: Destination for job failure and SLA breach alerts.
+    default: "pneimn1@gmail.com"
+
+  checkpoint_volume:
+    description: UC Volume path for Structured Streaming checkpoints and Auto Loader schema locations.
+    default: /Volumes/kings_dev/dev_pneimn1_ops/checkpoints
+
+  bronze_schema:
+    description: Bronze schema name. Referenced by pipeline resources.
+    default: bronze
+
+  pipeline_development_mode:
+    description: >-
+      Pipeline development mode keeps compute warm between runs. Convenient
+      while iterating, wasteful on a schedule — true in dev, false elsewhere.
+    default: true
+
+  sql_warehouse_id:
+    description: >-
+      Warehouse used by SQL tasks. Resolved by NAME at deploy time rather than
+      hardcoded as an ID, so the bundle stays portable across workspaces and
+      does not break when a warehouse is recreated. Free Edition provides
+      exactly one warehouse (ADR-002); change the name here if yours differs.
+    lookup:
+      warehouse: "Serverless Starter Warehouse"
+
+# ---------------------------------------------------------------------------
+# Targets
+# ---------------------------------------------------------------------------
+targets:
+
+  # Personal development. mode:development prefixes every deployed resource with
+  # the deploying user's name and pauses all schedules, so two engineers can
+  # deploy the same bundle to the same workspace without colliding. On Free
+  # Edition there is only one of you, but the isolation still matters: it keeps
+  # your ad-hoc deploys from overwriting whatever CI last pushed.
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://dbc-e2b6da17-c52e.cloud.databricks.com
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: kings_dev
+      landing_volume: /Volumes/kings_dev/dev_pneimn1_landing/files
+      environment: dev
+      data_scale: small
+      pipeline_continuous: false
+      checkpoint_volume: /Volumes/kings_dev/dev_pneimn1_ops/checkpoints
+      pipeline_development_mode: true
+
+  # Staging. Deployed automatically on merge to main. Runs production mode so the
+  # deployment path is identical to prd — the entire point of a staging tier is
+  # that it is not special. Schedules run, but against a small data volume.
+  stg:
+    mode: production
+    workspace:
+      host: https://dbc-e2b6da17-c52e.cloud.databricks.com
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: kings_stg
+      landing_volume: /Volumes/kings_stg/landing/files
+      environment: stg
+      data_scale: small
+      pipeline_continuous: false
+      checkpoint_volume: /Volumes/kings_stg/ops/checkpoints
+      pipeline_development_mode: false
+    presets:
+      tags:
+        env: stg
+        project: kings-ops-lakehouse
+        managed_by: bundle
+
+  # Production. Deployed only from a semver tag, behind a GitHub environment
+  # protection rule. Nothing reaches this target without passing stg first.
+  prd:
+    mode: production
+    workspace:
+      host: https://dbc-e2b6da17-c52e.cloud.databricks.com
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: kings_prd
+      landing_volume: /Volumes/kings_prd/landing/files
+      environment: prd
+      data_scale: medium
+      pipeline_continuous: false
+      checkpoint_volume: /Volumes/kings_prd/ops/checkpoints
+      pipeline_development_mode: false
+    presets:
+      tags:
+        env: prd
+        project: kings-ops-lakehouse
+        managed_by: bundle
+
+# ---------------------------------------------------------------------------
+# Sync exclusions
+# ---------------------------------------------------------------------------
+# Keep the deployed artifact small and free of anything that is not executable
+# platform code. Uploading test fixtures and generated data to the workspace is
+# a common and entirely avoidable source of slow deploys.
+sync:
+  exclude:
+    - "**/__pycache__/**"
+    - "**/.pytest_cache/**"
+    - "tests/**"
+    - "landing/**"
+    - "docs/**"
+    - ".venv/**"

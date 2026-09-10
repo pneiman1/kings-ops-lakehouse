@@ -1,0 +1,11 @@
+# Production overlay.
+catalog: kings_prd
+landing_volume: /Volumes/kings_prd/landing/files
+checkpoint_volume: /Volumes/kings_prd/ops/checkpoints
+data_scale: medium
+quality:
+  max_quarantine_pct_warn: 1.0
+  max_quarantine_pct_fail: 5.0
+  max_null_key_pct_fail: 0.0
+  min_expected_row_count: 1
+  freshness_sla_minutes: 120

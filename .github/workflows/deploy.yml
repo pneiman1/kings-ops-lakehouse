@@ -1,0 +1,84 @@
+# Deployment.
+#
+#   merge to main  ->  deploy stg, then run the smoke job against it
+#   semver tag     ->  deploy prd, behind a GitHub environment protection rule
+#
+# Production deploys are tag-triggered rather than branch-triggered so that the
+# thing deployed is an immutable, named artifact you can point at in an incident
+# review. "We deployed main" is not an answer to "what was running at 02:00?"
+
+name: deploy
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Bundle target to deploy
+        required: true
+        default: stg
+        type: choice
+        options: [stg, prd]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-stg:
+    if: github.ref == 'refs/heads/main' || github.event.inputs.target == 'stg'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+
+      - name: Validate
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: databricks bundle validate --target stg
+
+      - name: Deploy
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: databricks bundle deploy --target stg
+
+      # A deploy that is never exercised proves only that YAML parses. The smoke
+      # job asserts the deployed platform can actually reach its catalog and
+      # write a row.
+      - name: Smoke test
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: databricks bundle run smoke_test --target stg
+
+  deploy-prd:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.target == 'prd'
+    runs-on: ubuntu-latest
+    # Configure this GitHub environment with a required reviewer. That approval
+    # step is the only thing standing between a bad merge and production.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+
+      - name: Validate
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: databricks bundle validate --target prd
+
+      - name: Deploy
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: databricks bundle deploy --target prd
+
+      - name: Smoke test
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: databricks bundle run smoke_test --target prd

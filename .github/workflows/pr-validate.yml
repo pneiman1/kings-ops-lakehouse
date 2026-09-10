@@ -1,0 +1,84 @@
+# Pull request gate.
+#
+# This workflow is the reason the repo has a CI story at all: it can FAIL, and
+# nothing merges when it does. Four gates, cheapest first, so a formatting error
+# costs eight seconds rather than four minutes of Databricks validation.
+#
+#   1. ruff      - lint + import order
+#   2. mypy      - static types on src/
+#   3. pytest    - unit suite, no cluster required
+#   4. bundle validate - EVERY target, so a config error in prd is caught in the
+#                        PR that introduces it rather than at release time
+#
+# Gate 4 is the one most portfolios omit. Validating only the default target
+# means a broken prd override ships silently and detonates on tag day.
+
+name: pr-validate
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check src tests tools
+
+      - name: Format check (ruff)
+        run: ruff format --check src tests tools
+
+      - name: Type check (mypy)
+        run: mypy
+
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Unit tests
+        run: pytest tests/unit -v --cov=kings_ops --cov-report=term-missing --cov-fail-under=80
+
+  bundle-validate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [dev, stg, prd]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: databricks/setup-cli@main
+
+      - name: Validate bundle for ${{ matrix.target }}
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: databricks bundle validate --target ${{ matrix.target }}
