@@ -1122,4 +1122,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    _rc = main()`n    if _rc != 0:`n        raise SystemExit(_rc)
+    # Deliberately NOT `raise SystemExit(main())`, idiomatic though that is.
+    # Databricks runs spark_python_task inside a notebook-like runtime that
+    # treats ANY SystemExit as a task failure, including SystemExit(0). A clean
+    # run would be reported as INTERNAL_ERROR. Only raise on genuine failure.
+    _rc = main()
+    if _rc != 0:
+        raise SystemExit(_rc)

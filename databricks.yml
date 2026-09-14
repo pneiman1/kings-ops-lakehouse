@@ -34,7 +34,7 @@ variables:
 
   landing_volume:
     description: Fully-qualified UC Volume path for the raw landing zone.
-    default: /Volumes/kings_dev/dev_pneimn1_landing/files
+    default: /Volumes/kings_dev/landing/files
 
   environment:
     description: Short environment code, stamped onto every table and log record.
@@ -54,7 +54,7 @@ variables:
 
   checkpoint_volume:
     description: UC Volume path for Structured Streaming checkpoints and Auto Loader schema locations.
-    default: /Volumes/kings_dev/dev_pneimn1_ops/checkpoints
+    default: /Volumes/kings_dev/ops/checkpoints
 
   bronze_schema:
     description: Bronze schema name. Referenced by pipeline resources.
@@ -86,18 +86,36 @@ targets:
   # Edition there is only one of you, but the isolation still matters: it keeps
   # your ad-hoc deploys from overwriting whatever CI last pushed.
   dev:
-    mode: development
+    # NOTE: deliberately NOT `mode: development`.
+    #
+    # A mode is just a named bundle of presets. Development mode prepends
+    # [dev <username>] to every resource name so two engineers sharing a
+    # workspace cannot collide. This is a solo project on a single-workspace
+    # Free Edition account, so that prefix buys nothing and makes every schema
+    # name and portfolio screenshot worse.
+    #
+    # Setting `name_prefix: ""` does NOT remove it — an empty string reads as
+    # unset and falls back to the mode default. So instead of fighting the mode,
+    # declare the presets we actually want and skip the mode entirely:
+    #   - pipelines_development: warm compute between runs while iterating
+    #   - trigger_pause_status: PAUSED — nothing fires on a schedule in dev
     default: true
+    presets:
+      pipelines_development: true
+      trigger_pause_status: PAUSED
+      tags:
+        env: dev
+        project: kings-ops-lakehouse
     workspace:
       host: https://dbc-e2b6da17-c52e.cloud.databricks.com
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: kings_dev
-      landing_volume: /Volumes/kings_dev/dev_pneimn1_landing/files
+      landing_volume: /Volumes/kings_dev/landing/files
       environment: dev
       data_scale: small
       pipeline_continuous: false
-      checkpoint_volume: /Volumes/kings_dev/dev_pneimn1_ops/checkpoints
+      checkpoint_volume: /Volumes/kings_dev/ops/checkpoints
       pipeline_development_mode: true
 
   # Staging. Deployed automatically on merge to main. Runs production mode so the
