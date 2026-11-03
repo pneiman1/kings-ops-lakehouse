@@ -1,0 +1,44 @@
+# Silver batch pipeline (Lakeflow Spark Declarative Pipeline).
+#
+# ADR-003 concurrency budget: one active pipeline per type. Silver is batch and
+# scheduled distinctly from the bronze/streaming pipelines, so they are never
+# co-resident on the single available slot.
+#
+# The pipeline is a THIN wrapper: every transformation is a pure function in
+# src/kings_ops/transforms, unit-tested without a cluster. This file only wires
+# bronze reads to those functions and declares the silver tables.
+
+resources:
+  pipelines:
+
+    silver_batch:
+      name: "[${var.environment}] silver batch"
+      catalog: ${var.catalog}
+      schema: ${var.silver_schema}
+
+      # Serverless only on Free Edition (ADR-002), and the right default anyway.
+      serverless: true
+
+      # Batch, not continuous: silver is a full-recompute of conformed state from
+      # bronze, run after ingestion, not a standing stream.
+      continuous: false
+
+      development: ${var.pipeline_development_mode}
+      photon: true
+
+      libraries:
+        - glob:
+            include: ../../pipelines/silver/**
+
+      configuration:
+        # Surfaced via spark.conf.get(). Silver reads bronze in the SAME catalog,
+        # so only the bronze schema name needs threading through.
+        kings.bronze_schema: ${var.bronze_schema}
+        kings.environment: ${var.environment}
+
+      notifications:
+        - email_recipients:
+            - ${var.notification_email}
+          alerts:
+            - on-update-failure
+            - on-flow-failure

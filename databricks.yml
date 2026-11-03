@@ -60,6 +60,10 @@ variables:
     description: Bronze schema name. Referenced by pipeline resources.
     default: bronze
 
+  silver_schema:
+    description: Silver schema name. Conformed entities and SCD2 dimensions.
+    default: silver
+
   pipeline_development_mode:
     description: >-
       Pipeline development mode keeps compute warm between runs. Convenient

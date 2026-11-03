@@ -126,6 +126,63 @@ FORMAT_OPTIONS ('header' = 'true', 'inferSchema' = 'false')
 COPY_OPTIONS ('mergeSchema' = 'false');
 
 -- --------------------------------------------------------------------------- --
+-- CRM accounts
+-- --------------------------------------------------------------------------- --
+-- A nightly full snapshot, PII-bearing. It lands as reference data (occasional,
+-- bounded) so COPY INTO fits — but the SILVER layer historizes it as SCD Type 2
+-- (dim_account), because account attributes like cohort and active-status change
+-- over the season and the renewal book needs the history, not just the latest
+-- value. See src/kings_ops/transforms/scd2.py.
+
+CREATE TABLE IF NOT EXISTS bronze.br_account (
+  account_id          STRING NOT NULL COMMENT 'Ticket account identifier',
+  first_name          STRING,
+  last_name           STRING,
+  email               STRING,
+  phone               STRING,
+  street_address      STRING,
+  postal_code         STRING,
+  origin_state        STRING COMMENT 'Visitor origin; NV for locals',
+  birth_date          DATE   COMMENT 'Drives minor-status row filter in governance',
+  cohort              STRING COMMENT 'LOCAL_PLAN, TOURIST, GROUP_BLOCK',
+  payment_token_last4 STRING,
+  acquisition_channel STRING,
+  created_ts          TIMESTAMP,
+  is_active           BOOLEAN,
+  _ingest_ts          TIMESTAMP,
+  _source_file        STRING,
+  _contract_version   STRING
+)
+COMMENT 'Bronze CRM account snapshot. PII-bearing; historized to SCD2 in silver.'
+TBLPROPERTIES ('quality' = 'bronze');
+
+COPY INTO bronze.br_account
+FROM (
+  SELECT
+    account_id,
+    first_name,
+    last_name,
+    email,
+    phone,
+    street_address,
+    postal_code,
+    origin_state,
+    CAST(birth_date AS DATE)       AS birth_date,
+    cohort,
+    payment_token_last4,
+    acquisition_channel,
+    CAST(created_ts AS TIMESTAMP)  AS created_ts,
+    CAST(is_active AS BOOLEAN)     AS is_active,
+    current_timestamp()           AS _ingest_ts,
+    _metadata.file_path           AS _source_file,
+    '1.0.0'                       AS _contract_version
+  FROM '/Volumes/${catalog}/landing/files/crm_accounts'
+)
+FILEFORMAT = CSV
+FORMAT_OPTIONS ('header' = 'true', 'inferSchema' = 'false')
+COPY_OPTIONS ('mergeSchema' = 'false');
+
+-- --------------------------------------------------------------------------- --
 -- Reconciliation
 -- --------------------------------------------------------------------------- --
 -- The generator writes _manifest.json with per-dataset row counts. Comparing
