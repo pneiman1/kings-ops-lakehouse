@@ -64,6 +64,10 @@ variables:
     description: Silver schema name. Conformed entities and SCD2 dimensions.
     default: silver
 
+  gold_schema:
+    description: Gold schema name. Star schema and business marts.
+    default: gold
+
   pipeline_development_mode:
     description: >-
       Pipeline development mode keeps compute warm between runs. Convenient
