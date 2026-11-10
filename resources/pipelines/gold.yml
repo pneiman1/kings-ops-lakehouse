@@ -1,0 +1,40 @@
+# Gold star-schema pipeline (Lakeflow Spark Declarative Pipeline).
+#
+# ADR-003 concurrency budget: one active pipeline per type, scheduled distinctly
+# from bronze/silver. ADR-007: the gold objects are materialized views (stored +
+# incrementally maintained), refreshed with the batch cadence, not continuously.
+#
+# Thin wrapper: all logic is in src/kings_ops/transforms/gold.py, unit-tested
+# without a cluster. This file only wires silver reads to those functions.
+
+resources:
+  pipelines:
+
+    gold_star:
+      name: "[${var.environment}] gold star schema"
+      catalog: ${var.catalog}
+      schema: ${var.gold_schema}
+
+      serverless: true
+      continuous: false
+      development: ${var.pipeline_development_mode}
+      photon: true
+
+      libraries:
+        - glob:
+            include: ../../pipelines/gold/**
+
+      configuration:
+        # Gold reads silver in the SAME catalog; only the schema name is threaded.
+        kings.silver_schema: ${var.silver_schema}
+        kings.environment: ${var.environment}
+        # Calendar spine bounds for dim_date — the inaugural 2027 season.
+        kings.season_start: "2027-01-01"
+        kings.season_end: "2027-12-31"
+
+      notifications:
+        - email_recipients:
+            - ${var.notification_email}
+          alerts:
+            - on-update-failure
+            - on-flow-failure
