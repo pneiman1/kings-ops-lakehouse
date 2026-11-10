@@ -70,12 +70,19 @@ if (REPO / "databricks.yml").exists():
         problems.append(f"databricks bundle validate failed:\n{out[:3000]}")
 
 # 4. nothing secret committed
+# (pattern, human label, is_workspace_url)
 SECRET_PATTERNS = [
-    (r"dapi[0-9a-f]{32}", "a Databricks personal access token"),
-    (r"https://[a-z0-9-]+\.cloud\.databricks\.com", "a hardcoded workspace URL"),
-    (r"https://adb-\d+\.\d+\.azuredatabricks\.net", "a hardcoded workspace URL"),
-    (r"(?i)(password|client_secret)\s*[=:]\s*['\"][^'\"]{8,}", "an inline credential"),
+    (r"dapi[0-9a-f]{32}", "a Databricks personal access token", False),
+    (r"https://[a-z0-9-]+\.cloud\.databricks\.com", "a hardcoded workspace URL", True),
+    (r"https://adb-\d+\.\d+\.azuredatabricks\.net", "a hardcoded workspace URL", True),
+    (r"(?i)(password|client_secret)\s*[=:]\s*['\"][^'\"]{8,}", "an inline credential", False),
 ]
+
+# databricks.yml is the ONE file where workspace host URLs legitimately live:
+# they are the target definitions, and CONVENTIONS.md explicitly says URLs belong
+# in bundle targets. Flagging them there is a false positive. Tokens and inline
+# credentials are still scanned everywhere, including here.
+URL_ALLOWED_FILES = {"databricks.yml"}
 code, out = run(["git", "diff", "--name-only", "HEAD"])
 if code == 0 and out:
     for name in out.splitlines():
@@ -86,7 +93,9 @@ if code == 0 and out:
             text = path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
-        for pattern, label in SECRET_PATTERNS:
+        for pattern, label, is_url in SECRET_PATTERNS:
+            if is_url and Path(name).name in URL_ALLOWED_FILES:
+                continue
             if re.search(pattern, text):
                 problems.append(
                     f"{name} contains what looks like {label}. "

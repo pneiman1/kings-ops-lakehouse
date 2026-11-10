@@ -24,3 +24,30 @@ python -m ruff check src --fix          # auto-fixes UP035 import moves + import
 contract lines by hand onto a second line. Do **not** shorten the descriptions;
 the `__seq` / `__commit_ts` text is load-bearing documentation of the CDC
 ordering trap.
+
+---
+
+## Local PySpark on Windows: "Python worker failed to connect back"
+
+**Symptom.** A local `SparkSession` starts, then `.collect()`/`.show()` dies with
+`SparkException: Python worker failed to connect back` and a
+`SocketTimeoutException`, often naming `host.docker.internal` as the executor.
+
+**Cause.** Two Windows-specific things: (1) Spark's driver binds to the machine's
+resolved hostname (here `host.docker.internal`) instead of loopback, so the
+Python worker can't connect back; (2) the worker may launch the wrong Python.
+
+**Fix.** The `spark` pytest fixture in `tests/conftest.py` already applies this —
+if you build a session by hand, mirror it:
+```python
+import os, sys
+os.environ.setdefault("PYSPARK_PYTHON", sys.executable)
+os.environ.setdefault("PYSPARK_DRIVER_PYTHON", sys.executable)
+SparkSession.builder.master("local[1]") \
+    .config("spark.driver.host", "127.0.0.1") \
+    .config("spark.driver.bindAddress", "127.0.0.1")
+```
+The `winutils.exe` / `HADOOP_HOME` WARN is harmless for in-memory DataFrame unit
+tests (no file I/O), and can be ignored. Install the Spark deps with
+`pip install "pyspark>=3.5" "chispa>=0.10"` — **not** `--user` (rejected inside
+the `.venv`).
