@@ -19,8 +19,9 @@ import os
 import sys
 import time
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, Iterator
+from typing import Any
 
 _RUN_ID_ENV = "KINGS_RUN_ID"
 

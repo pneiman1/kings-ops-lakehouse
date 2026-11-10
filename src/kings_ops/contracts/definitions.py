@@ -190,18 +190,21 @@ GATE_SCANS = DataContract(
     columns=(
         Column("scan_id", "STRING", nullable=False, description="Unique scan event identifier"),
         Column("game_id", "STRING", nullable=False, description="Game this scan belongs to"),
-        Column("order_id", "STRING", description="Ticket order; null or unmatched for invalid scans"),
+        Column("order_id", "STRING",
+               description="Ticket order; null or unmatched for invalid scans"),
         Column("seat_id", "STRING", description="Seat scanned into"),
         Column("gate", "STRING", nullable=False, description="Physical gate"),
         Column("scan_ts", "TIMESTAMP", nullable=False, description="Event time, not arrival time"),
         Column("device_id", "STRING", description="Scanner hardware identifier"),
         Column("device_type", "STRING", description="TURNSTILE or HANDHELD"),
-        Column("scan_result", "STRING", description="ACCEPTED, DUPLICATE, INVALID, UNKNOWN_CREDENTIAL"),
+        Column("scan_result", "STRING",
+               description="ACCEPTED, DUPLICATE, INVALID, UNKNOWN_CREDENTIAL"),
         Column("ticket_medium", "STRING", description="MOBILE, PRINT_AT_HOME, CARD"),
         # Added in 1.1.0. Nullable by necessity: rows from before the firmware
         # rollout will never have it, and declaring it NOT NULL would quarantine
         # half the season for a field that did not exist yet.
-        Column("scan_device_os", "STRING", description="Scanner OS; absent before mid-season rollout"),
+        Column("scan_device_os", "STRING",
+               description="Scanner OS; absent before mid-season rollout"),
     ),
 )
 
@@ -229,13 +232,16 @@ TICKETING_CDC = DataContract(
         Column("resold_ts", "TIMESTAMP"),
         Column("refunded_ts", "TIMESTAMP"),
         Column("is_comp", "BOOLEAN"),
-        Column("event_type", "STRING", nullable=False, description="SALE, TRANSFER, RESALE, REFUND"),
+        Column("event_type", "STRING", nullable=False,
+               description="SALE, TRANSFER, RESALE, REFUND"),
         Column("__op", "STRING", nullable=False, description="I, U, or D"),
         # __seq is the ONLY reliable ordering key. __commit_ts is backdated by the
         # source when corrections are issued, so ordering by it resurrects
         # refunded orders. This is the single most important comment in the file.
-        Column("__seq", "BIGINT", nullable=False, description="Monotonic source sequence — order by THIS"),
-        Column("__commit_ts", "TIMESTAMP", nullable=False, description="Source commit time; may be backdated"),
+        Column("__seq", "BIGINT", nullable=False,
+               description="Monotonic source sequence — order by THIS"),
+        Column("__commit_ts", "TIMESTAMP", nullable=False,
+               description="Source commit time; may be backdated"),
     ),
 )
 
@@ -310,7 +316,8 @@ SEAT_MANIFEST = DataContract(
         Column("per_cap_multiplier", "DOUBLE"),
         Column("is_ada", "BOOLEAN"),
         Column("is_shaded_day", "BOOLEAN"),
-        Column("renumbered_to_section", "INT", description="Set for sections renumbered mid-season"),
+        Column("renumbered_to_section", "INT",
+               description="Set for sections renumbered mid-season"),
         Column("renumber_effective_date", "DATE"),
     ),
 )

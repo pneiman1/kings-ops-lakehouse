@@ -1,0 +1,90 @@
+{
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)",
+      "Bash(python scripts/:*)",
+      "Bash(python -m ruff:*)",
+      "Bash(ruff:*)",
+      "Bash(pytest:*)",
+      "Bash(pip install:*)",
+      "Bash(databricks auth describe:*)",
+      "Bash(databricks current-user:*)",
+      "Bash(databricks workspace list:*)",
+      "Bash(databricks workspace export:*)",
+      "Bash(databricks workspace import:*)",
+      "Bash(databricks workspace import-dir:*)",
+      "Bash(databricks sync:*)",
+      "Bash(databricks fs ls:*)",
+      "Bash(databricks fs cp:*)",
+      "Bash(databricks jobs list:*)",
+      "Bash(databricks jobs get:*)",
+      "Bash(databricks jobs run-now:*)",
+      "Bash(databricks jobs submit:*)",
+      "Bash(databricks runs:*)",
+      "Bash(databricks clusters list:*)",
+      "Bash(databricks clusters get:*)",
+      "Bash(databricks clusters start:*)",
+      "Bash(databricks warehouses list:*)",
+      "Bash(databricks warehouses get:*)",
+      "Bash(databricks catalogs:*)",
+      "Bash(databricks schemas:*)",
+      "Bash(databricks tables:*)",
+      "Bash(databricks volumes:*)",
+      "Bash(databricks api get:*)",
+      "Bash(databricks api post:*)",
+      "Bash(databricks bundle validate:*)",
+      "Bash(databricks bundle deploy:*)",
+      "Bash(databricks bundle run:*)",
+      "Bash(databricks bundle summary:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh run:*)",
+      "Bash(gh workflow:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(rm -rf:*)",
+      "Bash(databricks bundle destroy:*)",
+      "Bash(databricks bundle deploy -t prod:*)",
+      "Bash(databricks bundle deploy --target prod:*)",
+      "Bash(databricks bundle run -t prod:*)",
+      "Bash(databricks jobs delete:*)",
+      "Bash(databricks clusters permanent-delete:*)",
+      "Bash(databricks schemas delete:*)",
+      "Bash(databricks catalogs delete:*)",
+      "Bash(databricks tables delete:*)",
+      "Bash(databricks workspace delete:*)",
+      "Bash(databricks secrets delete-scope:*)",
+      "Bash(databricks api delete:*)",
+      "Read(.env)",
+      "Read(~/.databrickscfg)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/validate.py"
+          }
+        ]
+      }
+    ]
+  }
+}
