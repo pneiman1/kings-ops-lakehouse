@@ -81,7 +81,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/validate.py"
+            "command": ".venv/Scripts/python .claude/hooks/validate.py"
           }
         ]
       }
