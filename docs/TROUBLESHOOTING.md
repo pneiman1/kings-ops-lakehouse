@@ -5,6 +5,31 @@ anything.
 
 ---
 
+## `validate.py` hook fails with "No module named ruff" on every edit
+
+**Symptom.** Every Edit/Write triggers the PostToolUse hook and immediately errors with:
+
+```
+ruff:
+C:\Users\...\Python311\python.exe: No module named ruff
+```
+
+**Cause.** The hook command in `.claude/settings.json` was `python .claude/hooks/validate.py`.
+On this machine `python` resolves to the system Python at
+`C:\Users\pneiman\AppData\Local\Programs\Python\Python311\python.exe`, which does not have
+`ruff` installed. Only the project `.venv` has it.
+
+**Fix.** Change the hook command to use the venv interpreter:
+
+```json
+"command": ".venv/Scripts/python .claude/hooks/validate.py"
+```
+
+The error will fire once more on the edit that changes `settings.json` itself (the hook runs
+with the old command on that exact edit), then stays green from that point on.
+
+---
+
 ## `validate.py` hook blocks every edit with pre-existing ruff errors in `src/`
 
 **Symptom.** The moment `.claude/hooks/validate.py` is installed, every Edit/Write
