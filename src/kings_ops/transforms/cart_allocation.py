@@ -1,21 +1,32 @@
 """Mobile cart allocation transforms.
 
 Batch pipeline: for each upcoming game, allocate ``n_carts`` mobile concession
-carts across six ballpark zones in 30-minute windows from gates-open through
+carts across eleven ballpark zones in 30-minute windows from gates-open through
 end of game.
+
+Zone layout (ADR-011):
+  Main concourse ring (5 zones, ground level, full wraparound):
+    MC_HOMEPLATE, MC_FIRSTBASE, MC_RIGHTFIELD, MC_LEFTFIELD, MC_THIRDBASE
+  Upper concourse ring (3 zones, full wraparound):
+    UC_INFIELD, UC_RIGHTSIDE, UC_LEFTSIDE
+  Premium level (1 zone):
+    SUITE_RING
+  Fixed stations (carts do not reposition):
+    BULLPEN_BAR, TEAM_STORE
 
 Algorithm — baseline_v1
 -----------------------
-1. Compute actual POS demand: transactions per zone × window per game.
+1. Compute actual POS demand: transactions per zone x window per game.
 2. Normalise to ``demand_index`` (zone's share of total transactions in that
    window).
 3. For each game, compute the *prior* average demand_index using only games
    that pre-date the target game (replay-safe, no lookahead).
-4. Allocate ``round(prior_demand_index × n_carts)`` carts per zone per window.
+4. Allocate ``round(prior_demand_index x n_carts)`` carts per zone per window.
 5. Zero out alcohol zones for windows past the 7th-inning cutoff.
 
 See docs/adr/ADR-011-cart-allocation.md for the full decision record including
-zone adjacency and portal mapping metadata reserved for enhanced_v2.
+ring adjacency, section-to-zone portal mapping, and switching penalty constants
+reserved for enhanced_v2/v3.
 """
 
 from __future__ import annotations
@@ -48,40 +59,83 @@ _ALCOHOL_CUTOFF_WINDOW: int = (
 ALGORITHM_VERSION: str = "baseline_v1"
 
 # ---------------------------------------------------------------------------
-# Zone metadata (static; layout from ADR-011)
+# Zone metadata (static; 11-zone layout from ADR-011)
 # ---------------------------------------------------------------------------
 
 #: All POS stand_location values in scope.
+#: Five main-concourse zones form a closed ring with wraparound
+#: (MC_THIRDBASE is adjacent to MC_HOMEPLATE).  Three upper-concourse zones
+#: form a second closed ring (UC_LEFTSIDE is adjacent to UC_INFIELD).
+#: BULLPEN_BAR and TEAM_STORE are fixed stations — carts do not reposition
+#: in or out of them.
 ZONES: tuple[str, ...] = (
-    "MAIN_CONCOURSE",
-    "UPPER_CONCOURSE",
-    "LEFT_FIELD_PLAZA",
-    "SUITE_LEVEL",
-    "TEAM_STORE",
-    "BULLPEN_BAR",
+    # Main concourse ring (ground level)
+    "MC_HOMEPLATE",   # secs 101-108: FIELD_PREMIUM, INFIELD_BOX
+    "MC_FIRSTBASE",   # secs 109-118: FIELD_PREMIUM, INFIELD_BOX
+    "MC_RIGHTFIELD",  # secs 119-131: BASELINE_BOX, OUTFIELD_RESERVED
+    "MC_LEFTFIELD",   # secs 132-148: BASELINE_BOX, OUTFIELD_RESERVED
+    "MC_THIRDBASE",   # secs 149-159: BASELINE_BOX, INFIELD_BOX
+    # Upper concourse ring
+    "UC_INFIELD",     # secs 201-220: UPPER_INFIELD, UPPER_RESERVED
+    "UC_RIGHTSIDE",   # secs 221-239: incl. renumbered secs 218-224
+    "UC_LEFTSIDE",    # secs 240-259: UPPER_RESERVED, STANDING_ROOM
+    # Premium level
+    "SUITE_RING",     # secs 301-339: SUITE
+    # Fixed stations
+    "BULLPEN_BAR",    # right-field specialty bar (alcohol)
+    "TEAM_STORE",     # merchandise only (no alcohol)
 )
 
-#: Zones where alcohol is served. TEAM_STORE is merchandise-only.
+#: Zones where alcohol is served.  TEAM_STORE is merchandise-only.
 ALCOHOL_ZONES: frozenset[str] = frozenset(ZONES) - {"TEAM_STORE"}
 
-#: Walkable adjacency between zones (undirected). Reserved for enhanced_v2.
+#: Ring adjacency (undirected).  Both concourse rings include wraparound:
+#:   Main ring:  MC_THIRDBASE <-> MC_HOMEPLATE
+#:   Upper ring: UC_LEFTSIDE  <-> UC_INFIELD
+#: Reserved for enhanced_v2 rebalancing.  Baseline_v1 does not use this.
 ZONE_ADJACENCY: dict[str, list[str]] = {
-    "MAIN_CONCOURSE": ["LEFT_FIELD_PLAZA", "BULLPEN_BAR"],
-    "LEFT_FIELD_PLAZA": ["MAIN_CONCOURSE"],
-    "BULLPEN_BAR": ["MAIN_CONCOURSE"],
-    "UPPER_CONCOURSE": ["SUITE_LEVEL"],
-    "SUITE_LEVEL": ["UPPER_CONCOURSE"],
-    "TEAM_STORE": [],
+    # Main concourse ring with wraparound
+    "MC_HOMEPLATE":  ["MC_FIRSTBASE", "MC_THIRDBASE",  "UC_INFIELD"],
+    "MC_FIRSTBASE":  ["MC_HOMEPLATE", "MC_RIGHTFIELD", "UC_RIGHTSIDE"],
+    "MC_RIGHTFIELD": ["MC_FIRSTBASE", "MC_LEFTFIELD",  "BULLPEN_BAR"],
+    "MC_LEFTFIELD":  ["MC_RIGHTFIELD", "MC_THIRDBASE"],
+    "MC_THIRDBASE":  ["MC_LEFTFIELD", "MC_HOMEPLATE",  "UC_LEFTSIDE"],
+    # Upper concourse ring with wraparound
+    "UC_INFIELD":    ["UC_RIGHTSIDE", "UC_LEFTSIDE",   "MC_HOMEPLATE", "SUITE_RING"],
+    "UC_RIGHTSIDE":  ["UC_INFIELD",   "MC_FIRSTBASE"],
+    "UC_LEFTSIDE":   ["UC_INFIELD",   "MC_THIRDBASE"],
+    # Premium — no ring, single connection
+    "SUITE_RING":    ["UC_INFIELD"],
+    # Fixed stations — spur connections only, carts do not traverse
+    "BULLPEN_BAR":   ["MC_RIGHTFIELD"],
+    "TEAM_STORE":    ["MC_HOMEPLATE"],
 }
 
-#: Which zones each physical gate feeds into (ADR-011 D7). Reserved for
-#: portal-adjusted model in enhanced_v2.
-GATE_PORTAL_MAP: dict[str, str] = {
-    "GATE_A": "MAIN_CONCOURSE",
-    "GATE_B": "MAIN_CONCOURSE",
-    "GATE_C": "LEFT_FIELD_PLAZA",
-    "GATE_D": "BULLPEN_BAR",
-}
+#: Section number -> zone name mapping (ADR-011 D7).
+#: Each tuple is (section_low_inclusive, section_high_inclusive, zone).
+#: Time-dependent: sections 118-124 were renumbered to 218-224 mid-season
+#: (the SCD2 event in dim_seat).  Enhanced models must join with awareness
+#: of that boundary.  Reserved for enhanced_v2.  Baseline_v1 does not use this.
+SECTION_ZONE_MAP: tuple[tuple[int, int, str], ...] = (
+    (101, 108, "MC_HOMEPLATE"),
+    (109, 118, "MC_FIRSTBASE"),   # pre-renumber: secs 118-124 were here
+    (119, 131, "MC_RIGHTFIELD"),
+    (132, 148, "MC_LEFTFIELD"),
+    (149, 159, "MC_THIRDBASE"),
+    (201, 220, "UC_INFIELD"),
+    (221, 239, "UC_RIGHTSIDE"),   # post-renumber: secs 218-224 land here
+    (240, 259, "UC_LEFTSIDE"),
+    (301, 339, "SUITE_RING"),
+)
+
+#: Minutes of productive window lost per zone moved during repositioning.
+#: A cart moving 2 zones loses ~20 min of a 30-min window.
+#: Reserved for enhanced_v3 penalty optimisation.
+SWITCHING_COST_MINUTES_PER_ZONE: int = 10
+
+#: Maximum zone moves feasible within a single 30-minute window.
+#: Beyond 2 moves the cart loses the entire window.
+MAX_MOVES_PER_WINDOW: int = 2
 
 # ---------------------------------------------------------------------------
 # Public transforms

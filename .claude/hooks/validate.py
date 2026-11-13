@@ -28,6 +28,11 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent.parent
 problems: list[str] = []
 
+# Prefer the project venv so ruff/yaml are available even when Claude Code
+# is launched with the system Python (Windows Store alias, etc.).
+_venv_py = REPO / ".venv" / "Scripts" / "python.exe"
+_PYTHON = str(_venv_py) if _venv_py.is_file() else sys.executable
+
 
 def run(cmd: list[str], timeout: int = 120) -> tuple[int, str]:
     try:
@@ -42,7 +47,7 @@ def run(cmd: list[str], timeout: int = 120) -> tuple[int, str]:
 # 1. lint
 targets = [str(p) for p in ("scripts", ".claude/hooks", "src") if (REPO / p).is_dir()]
 if targets:
-    code, out = run([sys.executable, "-m", "ruff", "check", *targets])
+    code, out = run([_PYTHON, "-m", "ruff", "check", *targets])
     if code != 0 and out:
         problems.append(f"ruff:\n{out}")
 
