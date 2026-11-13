@@ -21,6 +21,7 @@ include:
   - resources/schemas/*.yml
   - resources/jobs/*.yml
   - resources/pipelines/*.yml
+  - resources/apps/*.yml
 
 # ---------------------------------------------------------------------------
 # Variables

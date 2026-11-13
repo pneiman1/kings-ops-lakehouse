@@ -1,0 +1,38 @@
+# Databricks App — ticket pricing console (T9).
+#
+# Deploys the Streamlit app in app/ as a Databricks App with access to the
+# SQL warehouse and Unity Catalog gold tables. The service principal created
+# by the bundle gets SELECT on gold.* via the workspace-level grant in
+# sql/ddl/00_bootstrap_catalogs.sql.
+#
+# ADR-013-databricks-app.md documents the design decisions.
+
+resources:
+  apps:
+    pricing_console:
+      name: "[${var.environment}] pricing-console"
+      description: >-
+        Ticket pricing console. Surfaces dynamic-pricing effectiveness
+        (face vs. paid) and per-game revenue from gold.fact_ticket_order,
+        gold.fact_game_pnl, and gold.mart_revenue_by_seat_class.
+
+      source_code_path: ../../app
+
+      config:
+        command:
+          - streamlit
+          - run
+          - app.py
+          - --server.port=8080
+          - --server.address=0.0.0.0
+          - --server.headless=true
+
+        env:
+          - name: KINGS_CATALOG
+            value: ${var.catalog}
+          - name: KINGS_GOLD_SCHEMA
+            value: ${var.gold_schema}
+          - name: DATABRICKS_WAREHOUSE_ID
+            value: ${var.sql_warehouse_id}
+          # DATABRICKS_HOST and DATABRICKS_TOKEN are injected automatically
+          # by the Databricks Apps runtime from the workspace context.
