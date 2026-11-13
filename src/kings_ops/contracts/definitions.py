@@ -322,9 +322,53 @@ SEAT_MANIFEST = DataContract(
     ),
 )
 
+GUEST_SERVICES = DataContract(
+    source_name="guest_services",
+    version="1.0.0",
+    description="Guest services complaint tickets. Free text; may contain PII.",
+    evolution_policy=EvolutionPolicy.ADD_NEW_COLUMNS,
+    primary_key=("guest_ticket_id",),
+    event_time_column="reported_date",
+    required_columns=("guest_ticket_id", "issue_text"),
+    columns=(
+        Column("guest_ticket_id", "STRING", nullable=False),
+        Column("account_id", "STRING"),
+        Column("game_id", "STRING"),
+        Column("reported_date", "DATE"),
+        Column("issue_category_actual", "STRING",
+               description="Ground truth label — withheld from AI model in gold"),
+        Column("issue_text", "STRING", nullable=False, is_pii=True,
+               description="Free-text complaint; may embed name, email, or phone"),
+        Column("channel", "STRING",
+               description="IN_VENUE_KIOSK, EMAIL, PHONE, APP, SOCIAL"),
+    ),
+)
+
+SPONSORSHIP = DataContract(
+    source_name="sponsorship",
+    version="1.0.0",
+    description="Sponsorship agreements. Full prose for clause extraction.",
+    evolution_policy=EvolutionPolicy.RESCUE,
+    primary_key=("contract_id",),
+    required_columns=("contract_id", "contract_text"),
+    columns=(
+        Column("contract_id", "STRING", nullable=False),
+        Column("sponsor_name", "STRING", nullable=False),
+        Column("tier", "STRING",
+               description="FOUNDING, CORNERSTONE, OFFICIAL_PARTNER, SUPPORTING"),
+        Column("term_start", "DATE"),
+        Column("term_end", "DATE"),
+        Column("contract_text", "STRING", nullable=False,
+               description="Full contract prose; clause sentences separated by '. '"),
+    ),
+)
+
 CONTRACTS: dict[str, DataContract] = {
     c.source_name: c
-    for c in (GATE_SCANS, TICKETING_CDC, POS, CRM_ACCOUNTS, SEAT_MANIFEST)
+    for c in (
+        GATE_SCANS, TICKETING_CDC, POS, CRM_ACCOUNTS, SEAT_MANIFEST,
+        GUEST_SERVICES, SPONSORSHIP,
+    )
 }
 
 

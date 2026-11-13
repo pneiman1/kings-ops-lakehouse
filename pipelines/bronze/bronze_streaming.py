@@ -264,3 +264,63 @@ def q_pos_line():
         )
         .drop("_is_valid")
     )
+
+
+# --------------------------------------------------------------------------- #
+# Guest services tickets — RESCUE policy, Parquet batch files
+# --------------------------------------------------------------------------- #
+
+_guest = get_contract("guest_services")
+
+
+@dp.table(
+    name="br_guest_ticket",
+    comment="Bronze guest service tickets. Free text; PII-bearing. See ADR-012.",
+    table_properties={"quality": "bronze"},
+)
+@dp.expect_or_drop("ticket_id_present", "guest_ticket_id IS NOT NULL")
+def br_guest_ticket():
+    return (
+        spark.readStream  # noqa: F821
+        .format("cloudFiles")
+        .option("cloudFiles.format", "parquet")
+        .option(
+            "cloudFiles.schemaLocation",
+            f"{CHECKPOINT_VOLUME}/{ENVIRONMENT}/_schema/guest_ticket",
+        )
+        .option("cloudFiles.schemaEvolutionMode", "rescue")
+        .schema(_guest.schema_ddl())
+        .load(f"{LANDING_VOLUME}/guest_services")
+        .select("*", *_audit_columns())
+        .withColumn("_contract_version", F.lit(_guest.version))
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Sponsorship contracts — RESCUE policy, JSONL batch files
+# --------------------------------------------------------------------------- #
+
+_spn = get_contract("sponsorship")
+
+
+@dp.table(
+    name="br_sponsorship_contract",
+    comment="Bronze sponsorship agreements. Full contract prose for clause extraction (ADR-012).",
+    table_properties={"quality": "bronze"},
+)
+@dp.expect_or_drop("contract_id_present", "contract_id IS NOT NULL")
+def br_sponsorship_contract():
+    return (
+        spark.readStream  # noqa: F821
+        .format("cloudFiles")
+        .option("cloudFiles.format", "json")
+        .option(
+            "cloudFiles.schemaLocation",
+            f"{CHECKPOINT_VOLUME}/{ENVIRONMENT}/_schema/sponsorship_contract",
+        )
+        .option("cloudFiles.schemaEvolutionMode", "rescue")
+        .schema(_spn.schema_ddl())
+        .load(f"{LANDING_VOLUME}/sponsorship")
+        .select("*", *_audit_columns())
+        .withColumn("_contract_version", F.lit(_spn.version))
+    )
