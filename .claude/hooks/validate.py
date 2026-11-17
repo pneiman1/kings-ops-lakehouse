@@ -30,7 +30,11 @@ problems: list[str] = []
 
 # Prefer the project venv so ruff/yaml are available even when Claude Code
 # is launched with the system Python (Windows Store alias, etc.).
-_venv_py = REPO / ".venv" / "Scripts" / "python.exe"
+_venv_py = (
+    REPO / ".venv" / "Scripts" / "python.exe"   # Windows
+    if (REPO / ".venv" / "Scripts" / "python.exe").is_file()
+    else REPO / ".venv" / "bin" / "python"        # macOS / Linux
+)
 _PYTHON = str(_venv_py) if _venv_py.is_file() else sys.executable
 
 
